@@ -584,8 +584,6 @@ def handle_unlit_material(material: bpy.types.Material, bsdf: bpy.types.ShaderNo
                 
                 links.new(emission_shader.outputs["Emission"], output_node.inputs["Surface"])
 
-        material.use_backface_culling = False  # Often unlit materials are two-sided
-
 def apply_textures_to_existing_material(material: bpy.types.Material, config: MaterialConfig) -> None:
     """Apply textures to an existing material by modifying its node tree."""
     if not material.use_nodes:
@@ -642,6 +640,9 @@ def apply_textures_to_existing_material(material: bpy.types.Material, config: Ma
         colors = config.params.get("Colors", {})
         if "BaseColorTint" in colors:
             logger.info(f"No diffuse texture found for {material.name}, using BaseColorTint only")
+
+    base_overrides = config.params.get("Properties", {}).get("BasePropertyOverrides", {})
+    material.use_backface_culling = not base_overrides.get("TwoSided", False)
 
     # Handle unlit materials (emission-based)
     handle_unlit_material(material, bsdf, config)
