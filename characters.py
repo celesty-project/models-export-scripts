@@ -8,6 +8,7 @@ import sys
 import typing
 
 import bpy
+import bmesh
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -50,6 +51,10 @@ class CharacterConfig:
 
     _path: pathlib.Path
     _material_paths: dict[str, pathlib.Path]
+    
+    def get_path(self) -> pathlib.Path:
+        """Get the base path."""
+        return self._path
 
     def _parse_texture(self, ue_name: str, ue_path: str) -> Texture | None:
         """Parse a texture from UE4 export data."""
@@ -92,6 +97,47 @@ class CharacterConfig:
         filtered_textures = filter_none(textures)
 
         return MaterialConfig(textures=filtered_textures, params=material_config.get("Parameters", {}))
+
+@dataclasses.dataclass
+class MaterialActionRemove:
+    pass
+
+@dataclasses.dataclass
+class MaterialActionApplyCfg:
+    _textures: list[Texture]
+    _params: dict[str, typing.Any]
+    
+    def get_config(self, path: pathlib.Path) -> MaterialConfig:
+        textures = [
+            Texture(
+                slot=texture.slot,
+                path=path / texture.path.with_suffix(".png")
+            )
+            for texture in self._textures
+        ]
+        return MaterialConfig(textures=textures, params=self._params)
+
+@dataclasses.dataclass
+class SpecialMaterialConfig:
+    action: MaterialActionRemove | MaterialActionApplyCfg
+
+SPECIAL_MATERIALS: dict[str, SpecialMaterialConfig] = {
+    "MI_Flavia_FX_01": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
+    "MI_Flavia_S206_dress": SpecialMaterialConfig(
+        action=MaterialActionApplyCfg(
+            _textures=[
+                Texture(
+                    slot="BaseColor",
+                    path=pathlib.Path("PM/Content/PaperMan/SkinAssets/Characters/Flavia/S206/Mesh3D/Textures/T_Flavia_Body1_S206_D")
+                ),
+            ],
+            _params={}
+        ),
+    ),
+}
+"""Mapping of material names special handling configs."""
 
 def get_all_characters(path: pathlib.Path, export_type: typing.Literal["lobby", "battle"]) -> list[str]:
     """Get all character types from meshes configs directory."""
@@ -289,23 +335,6 @@ def clear_scene() -> None:
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
 
-def get_bone_position_from_armature(armature_obj: bpy.types.Object, bone_name: str) -> tuple[float, float, float] | None:
-    """Get bone position from armature object."""
-    if not armature_obj or armature_obj.type != "ARMATURE":
-        return None
-
-    armature = typing.cast(bpy.types.Armature, armature_obj.data)
-    bone = armature.bones.get(bone_name)
-    if not bone:
-        return None
-
-    # Get bone position in world coordinates
-    local_matrix = bone.matrix_local.copy()
-    world_matrix = armature_obj.matrix_world @ local_matrix
-    world_position = world_matrix.to_translation()
-    
-    return (world_position.x, world_position.y, world_position.z)
-
 def import_character_mesh(character_config: CharacterConfig) -> tuple[bpy.types.Object | None, bpy.types.Object | None]:
     """Import the main character mesh and return mesh object and armature."""
     if not character_config.mesh.exists():
@@ -422,17 +451,25 @@ def apply_material_parameters(bsdf: bpy.types.ShaderNodeBsdfPrincipled, config: 
             bpy.types.NodeSocketFloat,
             bsdf.inputs["Metallic"]
         ).default_value = float(scalars["MetallicOffset"])
-
     if "RoughnessOffset" in scalars:
         typing.cast(
             bpy.types.NodeSocketFloat,
             bsdf.inputs["Roughness"]
         ).default_value = float(scalars["RoughnessOffset"])
+    if "Roughness" in scalars:
+        typing.cast(
+            bpy.types.NodeSocketFloat,
+            bsdf.inputs["Roughness"]
+        ).default_value = float(scalars["Roughness"])
 
     if "OpacityScale" in scalars:
         opacity = float(scalars["OpacityScale"])
         typing.cast(bpy.types.NodeSocketFloat, bsdf.inputs["Alpha"]).default_value = opacity
         logger.info(f"Applied opacity: {opacity}")
+    elif "Opacity" in scalars:
+        opacity = float(scalars["Opacity"])
+        typing.cast(bpy.types.NodeSocketFloat, bsdf.inputs["Alpha"]).default_value = opacity
+        logger.info(f"Applied Opacity: {opacity}")
     
     colors = params.get("Colors", {})
     
@@ -611,15 +648,42 @@ def apply_textures_to_existing_material(material: bpy.types.Material, config: Ma
 
     logger.info(f"Applied {texture_count} textures and material parameters to '{material.name}'")
 
+def remove_faces_with_material(obj: bpy.types.Object, mat_index: int) -> None:
+    """Remove all faces that use the given material index."""
+    mesh = typing.cast(bpy.types.Mesh, obj.data)
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    faces_to_remove = [f for f in bm.faces if f.material_index == mat_index]
+    bmesh.ops.delete(bm, geom=faces_to_remove, context="FACES")
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    if mat_index < len(mesh.materials):
+        mesh.materials.pop(index=mat_index)
+
 def apply_textures_to_object(obj: bpy.types.Object, character_config: CharacterConfig) -> None:
     """Apply textures to all materials of an object."""
     data = typing.cast(bpy.types.Mesh, obj.data)
-
-    for material in data.materials:
+        
+    for i, material in enumerate(list(data.materials)):
         if material is None:
             continue
-        
+
         material_name = normalize_ue_str(material.name)
+        special_material = SPECIAL_MATERIALS.get(material_name)
+
+        if special_material is not None:
+            if isinstance(special_material.action, MaterialActionRemove):
+                logger.info(f"Removing special material and geometry: {material_name}")
+                remove_faces_with_material(obj, i)
+                continue
+            else:
+                material_config = special_material.action.get_config(character_config.get_path())
+                apply_textures_to_existing_material(material, material_config)
+            continue
+
         material_config = character_config.get_material_config(material_name)
         if material_config is not None:
             apply_textures_to_existing_material(material, material_config)
@@ -632,14 +696,14 @@ def export_character(character_config: CharacterConfig, output_path: pathlib.Pat
     clear_scene()
 
     main_mesh, armature = import_character_mesh(character_config)
-    if not main_mesh:
+    if main_mesh is None:
         logger.error("Failed to import main mesh")
         return
 
     apply_textures_to_object(main_mesh, character_config)
     
     all_objects = [main_mesh]
-    if armature:
+    if armature is not None:
         all_objects.append(armature)
 
     bpy.ops.object.select_all(action='DESELECT')
@@ -657,7 +721,12 @@ def export_character(character_config: CharacterConfig, output_path: pathlib.Pat
     bpy.ops.export_scene.gltf(
         filepath=str(output_file),
         use_selection=True,
-        export_format='GLB'
+        export_format='GLB',
+        # Some skins have vertex colors baked into the model that Blender mixes
+        # with the Base Color texture by default, causing darkened textures.
+        # Setting export_vertex_color='NONE' disables exporting vertex colors,
+        # which prevents unwanted mixing and ensures textures appear correctly.
+        export_vertex_color='NONE',
     )
 
     logger.info(f"Exported character: {output_file}")
