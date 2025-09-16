@@ -339,32 +339,35 @@ def clear_scene() -> None:
 
 def get_bone_position_from_armature(armature_obj: bpy.types.Object, bone_name: str) -> tuple[float, float, float] | None:
     """Get bone position from armature object."""
-    if not armature_obj or armature_obj.type != "ARMATURE":
+    if armature_obj.type != "ARMATURE":
         return None
 
     armature = typing.cast(bpy.types.Armature, armature_obj.data)
     bone = armature.bones.get(bone_name)
-    if not bone:
+    if bone is None:
         return None
 
-    # Get bone position in world coordinates
-    local_matrix = bone.matrix_local.copy()
-    world_matrix = armature_obj.matrix_world @ local_matrix
-    world_position = world_matrix.to_translation()
-    
-    return (world_position.x, world_position.y, world_position.z)
+    head_world = armature_obj.matrix_world @ bone.head_local
+    return (head_world.x, head_world.y, head_world.z)
 
-def position_weapon_part(part_obj: bpy.types.Object, part_name: str, main_armature: bpy.types.Object) -> None:
-    """Position a weapon part object at the corresponding bone location."""
+def position_weapon_part(part_obj: bpy.types.Object, part_name: str, main_armature: bpy.types.Object) -> bool:
+    """Position a weapon part object at the corresponding bone location.
+    
+    Returns:
+        bool: True if positioning was successful, False if bone was not found.
+    """
     if not part_obj or not main_armature:
-        return
+        return False
 
     position = get_bone_position_from_armature(main_armature, part_name)
-    if position:
+
+    if position is not None:
         part_obj.location = position
         logger.info(f"Positioned {part_name} at bone {part_name}: {position}")
+        return True
     else:
         logger.warning(f"Could not find bone {part_name} for part {part_name}")
+        return False
 
 def import_weapon_mesh(weapon_config: WeaponConfig) -> tuple[bpy.types.Object | None, bpy.types.Object | None]:
     """Import the main weapon mesh and return mesh object and armature."""
@@ -493,7 +496,7 @@ def apply_material_parameters(bsdf: bpy.types.ShaderNodeBsdfPrincipled, config: 
     """Apply scalar and color parameters from material config to the BSDF shader."""
     params = config.params
     scalars = params.get("Scalars", {})
-    
+
     if "MetallicOffset" in scalars:
         typing.cast(
             bpy.types.NodeSocketFloat,
@@ -504,11 +507,20 @@ def apply_material_parameters(bsdf: bpy.types.ShaderNodeBsdfPrincipled, config: 
             bpy.types.NodeSocketFloat,
             bsdf.inputs["Roughness"]
         ).default_value = float(scalars["RoughnessOffset"])
+    if "Roughness" in scalars:
+        typing.cast(
+            bpy.types.NodeSocketFloat,
+            bsdf.inputs["Roughness"]
+        ).default_value = float(scalars["Roughness"])
 
     if "OpacityScale" in scalars:
         opacity = float(scalars["OpacityScale"])
         typing.cast(bpy.types.NodeSocketFloat, bsdf.inputs["Alpha"]).default_value = opacity
-        logger.info(f"Applied opacity: {opacity}")
+        logger.info(f"Applied OpacityScale: {opacity}")
+    elif "Opacity" in scalars:
+        opacity = float(scalars["Opacity"])
+        typing.cast(bpy.types.NodeSocketFloat, bsdf.inputs["Alpha"]).default_value = opacity
+        logger.info(f"Applied Opacity: {opacity}")
     
     colors = params.get("Colors", {})
     
@@ -708,24 +720,28 @@ def export_weapon(weapon_config: WeaponConfig, output_path: pathlib.Path) -> Non
     clear_scene()
     
     main_mesh, armature = import_weapon_mesh(weapon_config)
-    if not main_mesh:
+    if main_mesh is None:
         logger.error("Failed to import main mesh")
         return
 
     apply_textures_to_object(main_mesh, weapon_config)
     
     all_objects = [main_mesh]
-    if armature:
+    if armature is not None:
         all_objects.append(armature)
 
     for part_config in weapon_config.parts:
         part_obj = import_weapon_part(part_config, weapon_config.info)
         if part_obj is not None:
-            apply_textures_to_object(part_obj, weapon_config)
 
             if armature is not None:
-                position_weapon_part(part_obj, part_config.name, armature)
-            
+                bone_found = position_weapon_part(part_obj, part_config.name, armature)
+                if not bone_found:
+                    logger.warning(f"Skipping part {part_config.name} - corresponding bone not found")
+                    bpy.data.objects.remove(part_obj, do_unlink=True)
+                    continue
+
+            apply_textures_to_object(part_obj, weapon_config)
             all_objects.append(part_obj)
 
     bpy.ops.object.select_all(action='DESELECT')
@@ -743,7 +759,12 @@ def export_weapon(weapon_config: WeaponConfig, output_path: pathlib.Path) -> Non
     bpy.ops.export_scene.gltf(
         filepath=str(output_file),
         use_selection=True,
-        export_format='GLB'
+        export_format='GLB',
+        # Some skins have vertex colors baked into the model that Blender mixes
+        # with the Base Color texture by default, causing darkened textures.
+        # Setting export_vertex_color='NONE' disables exporting vertex colors,
+        # which prevents unwanted mixing and ensures textures appear correctly.
+        export_vertex_color='NONE',
     )
 
     logger.info(f"Exported weapon: {output_file}")
