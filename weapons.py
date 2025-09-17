@@ -273,7 +273,8 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
 
     materials_objs = props["MainMesh"].get("Materials")
     s_material_paths = [
-        path / parse_material_path(obj) for obj in materials_objs if obj is not None
+        (path / parse_material_path(obj)) if obj is not None else None
+        for obj in materials_objs
     ] if materials_objs is not None else []
 
     mesh_data = get_ue_mesh_data(path, mesh_ue_path)
@@ -282,10 +283,11 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
     for i, obj in enumerate(mesh_data["SkeletalMaterials"]):
         key = parse_material_name(obj["Material"])
         
-        if len(s_material_paths) >= i + 1:
-            material_paths[key] = s_material_paths[i]
+        if len(s_material_paths) >= i + 1 and (s_path := s_material_paths[i]) is not None:
+            material_paths[key] = s_path
         else:
-            material_paths[key] = path / parse_material_path(obj["Material"])
+            if key not in material_paths:
+                material_paths[key] = path / parse_material_path(obj["Material"])
     
     parts: list[WeaponPartConfig] = []
 
@@ -302,7 +304,8 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
         p_materials_objs = p_val.get("Materials")
 
         p_s_material_paths = [
-            path / parse_material_path(obj) for obj in p_materials_objs if obj is not None
+            (path / parse_material_path(obj)) if obj is not None else None
+            for obj in p_materials_objs
         ] if p_materials_objs is not None else []
 
         p_mesh_data = get_ue_mesh_data(path, p_mesh_ue_path)
@@ -311,10 +314,11 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
         for i, obj in enumerate(p_mesh_data["SkeletalMaterials"]):
             key = parse_material_name(obj["Material"])
 
-            if len(p_s_material_paths) >= i + 1:
-                p_material_paths[key] = p_s_material_paths[i]
+            if len(p_s_material_paths) >= i + 1 and (p_s_path := p_s_material_paths[i]) is not None:
+                p_material_paths[key] = p_s_path
             else:
-                p_material_paths[key] = path / parse_material_path(obj["Material"])
+                if key not in p_material_paths:
+                    p_material_paths[key] = path / parse_material_path(obj["Material"])
 
         material_paths.update(p_material_paths)
         
