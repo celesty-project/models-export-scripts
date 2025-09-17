@@ -122,6 +122,15 @@ class SpecialMaterialConfig:
     action: MaterialActionRemove | MaterialActionApplyCfg
 
 SPECIAL_MATERIALS: dict[str, SpecialMaterialConfig] = {
+    "MI_Baimo_S206_Cloak": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
+    "MI_Baimo_S207_209Cloak_Lobby": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
+    "MI_Baimo_S210_Cloak_Lobby": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
     "MI_Leona_EyeP_S001": SpecialMaterialConfig(
         action=MaterialActionRemove()
     ),
@@ -380,7 +389,14 @@ def get_character_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_
         if len(s_material_paths) >= i + 1 and (s_path := s_material_paths[i]) is not None:
             material_paths[key] = s_path
         else:
-            material_paths[key] = path / parse_material_path(obj["Material"])
+            # Some skins (specifically, all Yugiri's rare skins)
+            # have repeated materials, some of which are missing.
+            # Because of that, custom materials get overriden if
+            # missing materials come after existing ones.
+            # So the solution is to check if a material was already assigned
+            # config path, and if so, don't override it.
+            if key not in material_paths:
+                material_paths[key] = path / parse_material_path(obj["Material"])
 
     return CharacterConfig(
         info=info,
