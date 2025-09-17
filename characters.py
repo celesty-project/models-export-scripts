@@ -125,12 +125,68 @@ SPECIAL_MATERIALS: dict[str, SpecialMaterialConfig] = {
     "MI_Flavia_FX_01": SpecialMaterialConfig(
         action=MaterialActionRemove()
     ),
+    "MI_Flavia_FX_S207_01": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
+    "MI_Flavia_FX_S208_01": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
+    "MI_Flavia_FX_S209_01": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
+    "MI_Flavia_FX_S210_01": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
     "MI_Flavia_S206_dress": SpecialMaterialConfig(
         action=MaterialActionApplyCfg(
             _textures=[
                 Texture(
                     slot="BaseColor",
                     path=pathlib.Path("PM/Content/PaperMan/SkinAssets/Characters/Flavia/S206/Mesh3D/Textures/T_Flavia_Body1_S206_D")
+                ),
+            ],
+            _params={}
+        ),
+    ),
+    "MI_Flavia_S207_dress": SpecialMaterialConfig(
+        action=MaterialActionApplyCfg(
+            _textures=[
+                Texture(
+                    slot="BaseColor",
+                    path=pathlib.Path("PM/Content/PaperMan/SkinAssets/Characters/Flavia/S207/Mesh3D/T_Flavia_Body1_S207_D")
+                ),
+            ],
+            _params={}
+        ),
+    ),
+    "MI_Flavia_S208_dress": SpecialMaterialConfig(
+        action=MaterialActionApplyCfg(
+            _textures=[
+                Texture(
+                    slot="BaseColor",
+                    path=pathlib.Path("PM/Content/PaperMan/SkinAssets/Characters/Flavia/S208/Mesh3D/T_Flavia_Body1_S208_D")
+                ),
+            ],
+            _params={}
+        ),
+    ),
+    "MI_Flavia_S209_dress": SpecialMaterialConfig(
+        action=MaterialActionApplyCfg(
+            _textures=[
+                Texture(
+                    slot="BaseColor",
+                    path=pathlib.Path("PM/Content/PaperMan/SkinAssets/Characters/Flavia/S209/Mesh3D/T_Flavia_Body1_S209_D")
+                ),
+            ],
+            _params={}
+        ),
+    ),
+    "MI_Flavia_S210_dress": SpecialMaterialConfig(
+        action=MaterialActionApplyCfg(
+            _textures=[
+                Texture(
+                    slot="BaseColor",
+                    path=pathlib.Path("PM/Content/PaperMan/SkinAssets/Characters/Flavia/S210/Mesh3D/T_Flavia_Body1_S210_D")
                 ),
             ],
             _params={}
