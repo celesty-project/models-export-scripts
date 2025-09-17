@@ -122,6 +122,9 @@ class SpecialMaterialConfig:
     action: MaterialActionRemove | MaterialActionApplyCfg
 
 SPECIAL_MATERIALS: dict[str, SpecialMaterialConfig] = {
+    "MI_Leona_EyeP_S001": SpecialMaterialConfig(
+        action=MaterialActionRemove()
+    ),
     "MI_Flavia_FX_01": SpecialMaterialConfig(
         action=MaterialActionRemove()
     ),
@@ -512,11 +515,6 @@ def apply_material_parameters(bsdf: bpy.types.ShaderNodeBsdfPrincipled, config: 
             bpy.types.NodeSocketFloat,
             bsdf.inputs["Roughness"]
         ).default_value = float(scalars["RoughnessOffset"])
-    if "Roughness" in scalars:
-        typing.cast(
-            bpy.types.NodeSocketFloat,
-            bsdf.inputs["Roughness"]
-        ).default_value = float(scalars["Roughness"])
 
     if "OpacityScale" in scalars:
         opacity = float(scalars["OpacityScale"])
