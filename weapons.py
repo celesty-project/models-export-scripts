@@ -328,6 +328,37 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
         )
         parts.append(cfg)
 
+    pendant_data = props.get("PendantSkeletalMesh", [])
+
+    if pendant_part := pendant_data[0] if len(pendant_data) > 0 else None:
+        p_mesh_ue_path = pendant_part["Mesh"]["ObjectPath"]
+        p_materials_objs = pendant_part.get("Materials")
+
+        p_s_material_paths = [
+            (path / parse_material_path(obj)) if obj is not None else None
+            for obj in p_materials_objs
+        ] if p_materials_objs is not None else []
+
+        p_mesh_data = get_ue_mesh_data(path, p_mesh_ue_path)
+        p_material_paths: dict[str, pathlib.Path] = {}
+        
+        for i, obj in enumerate(p_mesh_data["SkeletalMaterials"]):
+            key = parse_material_name(obj["Material"])
+
+            if len(p_s_material_paths) >= i + 1 and (p_s_path := p_s_material_paths[i]) is not None:
+                p_material_paths[key] = p_s_path
+            else:
+                if key not in p_material_paths:
+                    p_material_paths[key] = path / parse_material_path(obj["Material"])
+
+        material_paths.update(p_material_paths)
+        
+        cfg = WeaponPartConfig(
+            name="Pendant",
+            mesh=path / ue_mesh_path_to_normal(p_mesh_ue_path)
+        )
+        parts.append(cfg)
+
     return WeaponConfig(
         info=info,
         mesh=path / mesh_path,
