@@ -328,9 +328,7 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
         )
         parts.append(cfg)
 
-    pendant_data = props.get("PendantSkeletalMesh", [])
-
-    if pendant_part := pendant_data[0] if len(pendant_data) > 0 else None:
+    for pendant_part in props.get("PendantSkeletalMesh", []):
         p_mesh_ue_path = pendant_part["Mesh"]["ObjectPath"]
         p_materials_objs = pendant_part.get("Materials")
 
@@ -354,7 +352,7 @@ def get_weapon_config(path: pathlib.Path, full_name: str, skin_id: str, mesh_con
         material_paths.update(p_material_paths)
         
         cfg = WeaponPartConfig(
-            name="Pendant",
+            name=pendant_part["SocketName"].replace("_Socket", ""),
             mesh=path / ue_mesh_path_to_normal(p_mesh_ue_path)
         )
         parts.append(cfg)
